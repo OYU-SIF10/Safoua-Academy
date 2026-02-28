@@ -1,39 +1,30 @@
-///// routes/userRoutes.js
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const userController = require("../controllers/userController");
-const { protect, authorizeRoles } = require("../middlewares/authMiddleware");
-const upload = require("../middlewares/uploadMiddleware");
+const userController = require('../controllers/userController');
+const { protect } = require('../middlewares/authMiddleware');
+const { authorizeRoles } = require('../middlewares/roleMiddleware');
+const { uploadImage } = require('../middlewares/uploadMiddleware'); // ✅ corrigé
 
-router.post(
-  "/register",
-  upload.single("image"),  // ← champ image
-  userController.register
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTES PUBLIQUES
+// ─────────────────────────────────────────────────────────────────────────────
 
+router.post('/register', uploadImage, userController.register);
+router.post('/login', userController.login);
 
-router.post("/register", userController.register);
-router.post("/login", userController.login);
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTES PRIVÉES — UTILISATEUR CONNECTÉ
+// ─────────────────────────────────────────────────────────────────────────────
 
-// 🔒 route protégée admin uniquement
-router.post(
-  "/ajouter",
-  protect,
-  authorizeRoles("admin"),
-  userController.ajouterUtilisateur
-);
+router.get('/me', protect, userController.getMe);
+router.put('/me', protect, uploadImage, userController.updateMe);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTES PRIVÉES — ADMIN UNIQUEMENT
+// ─────────────────────────────────────────────────────────────────────────────
 
-// 🔒 route protégée
-router.get("/", protect,authorizeRoles("admin") ,userController.listerUtilisateurs);
-
-
-
-router.post("/ajouter", userController.ajouterUtilisateur);
-router.get("/", userController.listerUtilisateurs);
-router.get("/:id", userController.getUtilisateurById);
-router.put("/:id", userController.updateUtilisateur);
-router.delete("/:id", userController.deleteUtilisateur);
-
+router.get('/', protect, authorizeRoles('admin'), userController.listerUtilisateurs);
+router.get('/:id', protect, authorizeRoles('admin'), userController.getUtilisateurById);
+router.delete('/:id', protect, authorizeRoles('admin'), userController.deleteUtilisateur);
 
 module.exports = router;

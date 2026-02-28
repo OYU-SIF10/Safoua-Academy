@@ -1,2 +1,7 @@
 node_modules/
 .env
+uploads/images/*
+uploads/videos/*
+uploads/audios/*
+uploads/pdfs/*
+!uploads/.gitkeep

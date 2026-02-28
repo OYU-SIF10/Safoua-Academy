@@ -1,149 +1,188 @@
-// controllers/userController.js
-const User = require("../models/User");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
 
-
-
-
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Inscription
+// @route   POST /api/users/register
+// @access  Public
+// ─────────────────────────────────────────────────────────────────────────────
 exports.register = async (req, res) => {
-  const { nom,prenom, email, mdp } = req.body;
-
   try {
+    const { nom, prenom, email, mot_de_passe } = req.body;
+
     const userExiste = await User.findOne({ email });
     if (userExiste) {
-      return res.status(400).json({ message: "Utilisateur déjà existant" });
+      return res.status(400).json({ success: false, message: 'Email déjà utilisé' });
     }
 
-    const hashedPassword = await bcrypt.hash(mdp, 10);
-
-    await User.create({
+    // ✅ User.create déclenche le pre('save') qui hash automatiquement
+    const user = await User.create({
       nom,
       prenom,
       email,
-      mdp: hashedPassword,
-      image: req.file ? req.file.filename : null
+      mot_de_passe,                                        // ✅ pas de hash manuel
+      photo_profil: req.file ? req.file.filename : null,   // ✅ renommé
     });
 
-        res.status(201).json({
-      _id: user._id,
-      nom: user.nom,
-      email: user.email,
-      image: user.image,
-    });
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
+    res.status(201).json({
+      success: true,
+      token,
+      data: {
+        _id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        email: user.email,
+        role: user.role,
+        photo_profil: user.photo_profil,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-
-
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Connexion
+// @route   POST /api/users/login
+// @access  Public
+// ─────────────────────────────────────────────────────────────────────────────
 exports.login = async (req, res) => {
-  const { email, mdp } = req.body;
-
   try {
+    const { email, mot_de_passe } = req.body;
+
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: "Identifiants invalides" });
+      return res.status(400).json({ success: false, message: 'Identifiants invalides' });
     }
 
-    const isMatch = await bcrypt.compare(mdp, user.mdp);
+    // ✅ Utiliser la méthode du modèle
+    const isMatch = await user.comparePassword(mot_de_passe);
     if (!isMatch) {
-      return res.status(400).json({ message: "Identifiants invalides" });
+      return res.status(400).json({ success: false, message: 'Identifiants invalides' });
     }
 
     const token = jwt.sign(
-      { id: user._id, role: user.role ,nom: user.nom },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: '7d' }
     );
 
-    res.json({
+    res.status(200).json({
+      success: true,
       token,
-      user: {
-        id: user._id,
+      data: {
+        _id: user._id,
         nom: user.nom,
+        prenom: user.prenom,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+        photo_profil: user.photo_profil,
+      },
     });
-
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-
-// Ajouter un utilisateur (admin uniquement)
-exports.ajouterUtilisateur = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Récupérer le profil de l'utilisateur connecté
+// @route   GET /api/users/me
+// @access  Privé
+// ─────────────────────────────────────────────────────────────────────────────
+exports.getMe = async (req, res) => {
   try {
-    const nouvelUser = new User(req.body);
-    await nouvelUser.save();
-    res.status(201).json(nouvelUser);
-  } catch (err) {
-    res.status(400).json({ message: "Erreur d’ajout", error: err.message });
+    // req.user est déjà injecté par authMiddleware (sans mot_de_passe)
+    res.status(200).json({ success: true, data: req.user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Récupérer tous les utilisateurs
+// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Mettre à jour son propre profil
+// @route   PUT /api/users/me
+// @access  Privé
+// ─────────────────────────────────────────────────────────────────────────────
+exports.updateMe = async (req, res) => {
+  try {
+    const { nom, prenom, mot_de_passe } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (nom) user.nom = nom;
+    if (prenom) user.prenom = prenom;
+    if (req.file) user.photo_profil = req.file.filename;
+
+    // ✅ Passer par .save() pour déclencher le pre('save') et hasher le mdp
+    if (mot_de_passe) user.mot_de_passe = mot_de_passe;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profil mis à jour avec succès',
+      data: {
+        _id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        email: user.email,
+        role: user.role,
+        photo_profil: user.photo_profil,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN UNIQUEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+// @desc    Lister tous les utilisateurs
+// @route   GET /api/users
+// @access  Admin
 exports.listerUtilisateurs = async (req, res) => {
   try {
-    const users = await User.find();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const users = await User.find().select('-mot_de_passe'); // ✅ sécurisé
+    res.status(200).json({ success: true, count: users.length, data: users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Récupérer un utilisateur par ID
+// @desc    Récupérer un utilisateur par ID
+// @route   GET /api/users/:id
+// @access  Admin
 exports.getUtilisateurById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-
+    const user = await User.findById(req.params.id).select('-mot_de_passe');
     if (!user) {
-      return res.status(404).json({ message: "Utilisateur non trouvé" });
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
-
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ message: "Erreur lors de la récupération", error: err.message });
+    res.status(200).json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Mettre à jour un utilisateur
-exports.updateUtilisateur = async (req, res) => {
-  try {
-    const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      {
-        new: true,          // retourne le document mis à jour
-        runValidators: true // applique les validations du schema
-      }
-    );
-
-    if (!updatedUser) {
-      return res.status(404).json({ message: "Utilisateur non trouvé" });
-    }
-
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(400).json({ message: "Erreur de mise à jour", error: err.message });
-  }
-};
-
-// Supprimer un utilisateur
+// @desc    Supprimer un utilisateur
+// @route   DELETE /api/users/:id
+// @access  Admin
 exports.deleteUtilisateur = async (req, res) => {
   try {
-    const deletedUser = await User.findByIdAndDelete(req.params.id);
-
-    if (!deletedUser) {
-      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
-
-    res.json({ message: "Utilisateur supprimé avec succès" });
-  } catch (err) {
-    res.status(500).json({ message: "Erreur de suppression", error: err.message });
+    res.status(200).json({ success: true, message: 'Utilisateur supprimé avec succès' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
