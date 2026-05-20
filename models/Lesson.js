@@ -97,11 +97,17 @@ const LessonSchema = new mongoose.Schema(
     },
 
     // Quiz à la fin de la leçon (optionnel)
-    quiz: [QuizSchema],
+    quiz: {
+      type: [QuizSchema],
+      default: [], // ✅ Ensure quiz always defaults to empty array
+    },
 
     // Métadonnées IA — pour le suivi de performance (BF-IA-02)
     meta_ia: {
-      competences_cibles: [String], // ex: ['tajwid', 'makharij', 'vocabulaire']
+      competences_cibles: {
+        type: [String], // ex: ['tajwid', 'makharij', 'vocabulaire']
+        default: [],
+      },
       niveau_difficulte: {
         type: Number,
         min: 1,
@@ -121,14 +127,20 @@ LessonSchema.index({ enseignant_id: 1 });
 
 // ─── Virtuel : nombre de questions dans le quiz ────────────────────────────
 LessonSchema.virtual('nombre_questions').get(function () {
-  return this.quiz.length;
+  // ✅ Fixed: Check if quiz exists before accessing length
+  return this.quiz ? this.quiz.length : 0;
 });
 
 // ─── Virtuel : points total du quiz ───────────────────────────────────────
 LessonSchema.virtual('points_total').get(function () {
-  return this.quiz.reduce((total, q) => total + q.points, 0);
+  // ✅ Fixed: Check if quiz exists and handle undefined points
+  if (!this.quiz || !Array.isArray(this.quiz)) {
+    return 0;
+  }
+  return this.quiz.reduce((total, q) => total + (q.points || 0), 0);
 });
 
+// ─── Configuration des virtuels ───────────────────────────────────────────
 LessonSchema.set('toJSON', { virtuals: true });
 LessonSchema.set('toObject', { virtuals: true });
 

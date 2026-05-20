@@ -12,13 +12,15 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'etudiant', 'enseignant'],
     default: 'etudiant',
   },
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpire: { type: Date, default: null },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('mot_de_passe')) return next();  // ✅ cohérent
   const salt = await bcrypt.genSalt(10);
   this.mot_de_passe = await bcrypt.hash(this.mot_de_passe, salt);
-  next();
+  
 });
 
 userSchema.methods.comparePassword = async function (password) {

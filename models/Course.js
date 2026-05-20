@@ -102,9 +102,6 @@ const CourseSchema = new mongoose.Schema(
       required: [true, "L'enseignant est obligatoire"],
     },
 
-    // Les leçons sont des sous-documents embarqués
-    lecons: [LessonSchema],
-
     // Statistiques
     nombre_inscrits: {
       type: Number,
@@ -130,11 +127,6 @@ CourseSchema.index({ titre: 'text', description: 'text', tags: 'text' });
 CourseSchema.index({ categorie: 1, niveau: 1 });
 CourseSchema.index({ enseignant_id: 1 });
 CourseSchema.index({ est_publie: 1 });
-
-// ─── Méthode virtuelle : nombre de leçons ─────────────────────────────────
-CourseSchema.virtual('nombre_lecons').get(function () {
-  return this.lecons.length;
-});
 
 CourseSchema.set('toJSON', { virtuals: true });
 CourseSchema.set('toObject', { virtuals: true });

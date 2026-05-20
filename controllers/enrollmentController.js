@@ -114,6 +114,7 @@ const getMyCourses = async (req, res) => {
       data: enrollments,
     });
   } catch (error) {
+     console.error('❌ getMyCourses ERROR:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -286,14 +287,25 @@ const getCourseStudents = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Action non autorisée' });
     }
 
-    const enrollments = await Enrollment.find({ cours_id: req.params.courseId })
-      .populate('etudiant_id', 'nom email photo_profil')
-      .select('etudiant_id progression statut date_inscription derniere_activite avis')
-      .sort({ date_inscription: -1 });
+    // ── Pagination ───────────────────────────────────────────────────────
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [enrollments, total] = await Promise.all([
+      Enrollment.find({ cours_id: req.params.courseId })
+        .populate('etudiant_id', 'nom email photo_profil')
+        .select('etudiant_id progression statut date_inscription derniere_activite avis')
+        .sort({ date_inscription: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      Enrollment.countDocuments({ cours_id: req.params.courseId }),
+    ]);
 
     res.status(200).json({
       success: true,
-      count: enrollments.length,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
       data: enrollments,
     });
   } catch (error) {

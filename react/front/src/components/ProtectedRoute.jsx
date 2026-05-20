@@ -1,0 +1,29 @@
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { ROLE_ROUTES } from '../constants';
+
+// ─── Route protégée — redirige vers /login si non connecté ────────────────
+const ProtectedRoute = ({ children, roles }) => {
+  const { isAuthenticated, user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f0faf4]">
+        <div className="w-10 h-10 border-4 border-[#1a7a4a] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Vérifier le rôle si spécifié
+  if (roles && !roles.includes(user?.role)) {
+    return <Navigate to={ROLE_ROUTES[user?.role] || '/'} replace />;
+  }
+
+  return children;
+};
+
+export default ProtectedRoute;

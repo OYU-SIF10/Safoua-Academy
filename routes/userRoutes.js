@@ -11,6 +11,8 @@ const { uploadImage } = require('../middlewares/uploadMiddleware'); // ✅ corri
 
 router.post('/register', uploadImage, userController.register);
 router.post('/login', userController.login);
+router.post('/forgot-password', userController.forgotPassword);
+router.put('/reset-password/:token', userController.resetPassword);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTES PRIVÉES — UTILISATEUR CONNECTÉ

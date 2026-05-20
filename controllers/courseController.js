@@ -1,4 +1,5 @@
 const Course = require('../models/Course');
+const Lesson = require('../models/Lesson');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // @desc    Créer un nouveau cours
@@ -48,16 +49,19 @@ const getAllCourses = async (req, res) => {
     if (langue) filter.langue = langue;
 
     // Recherche textuelle (BF-COURSE-03)
+     // ✅ Recherche par regex au lieu de $text (pas besoin d'index)
     if (search) {
-      filter.$text = { $search: search };
+      filter.$or = [
+        { titre:       { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags:        { $regex: search, $options: 'i' } },
+      ];
     }
-
     const skip = (Number(page) - 1) * Number(limit);
 
     const [courses, total] = await Promise.all([
       Course.find(filter)
         .populate('enseignant_id', 'nom email')
-        .select('-lecons') // ne pas retourner les leçons dans la liste
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
@@ -111,7 +115,6 @@ const getCourseById = async (req, res) => {
 const getMyCourses = async (req, res) => {
   try {
     const courses = await Course.find({ enseignant_id: req.user._id })
-      .select('-lecons')
       .sort({ createdAt: -1 });
 
     res.status(200).json({ success: true, count: courses.length, data: courses });
@@ -172,12 +175,19 @@ const togglePublishCourse = async (req, res) => {
     }
 
     // Un cours doit avoir au moins une leçon pour être publié
-    if (!course.est_publie && course.lecons.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Ajoutez au moins une leçon avant de publier le cours',
-      });
-    }
+    if (!course.est_publie) {
+  const nombreLecons = await Lesson.countDocuments({
+    cours_id: req.params.id,
+    est_publiee: true,
+  });
+
+  if (nombreLecons === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Ajoutez au moins une leçon publiée avant de publier le cours',
+    });
+  }
+}
 
     course.est_publie = !course.est_publie;
     await course.save();
@@ -227,79 +237,12 @@ const deleteCourse = async (req, res) => {
 // @desc    Ajouter une leçon à un cours
 // @route   POST /api/courses/:id/lessons
 // @access  Privé (Enseignant propriétaire)
-const addLesson = async (req, res) => {
-  try {
-    const course = await Course.findById(req.params.id);
 
-    if (!course) {
-      return res.status(404).json({ success: false, message: 'Cours introuvable' });
-    }
-
-    if (course.enseignant_id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Action non autorisée' });
-    }
-
-    const { titre, type_contenu, url_media, duree_minutes, quiz } = req.body;
-
-    const nouvelleLecon = {
-      titre,
-      type_contenu,
-      url_media,
-      duree_minutes,
-      ordre: course.lecons.length + 1, // ordre automatique
-      quiz: quiz || [],
-    };
-
-    course.lecons.push(nouvelleLecon);
-    await course.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Leçon ajoutée avec succès',
-      data: course.lecons[course.lecons.length - 1],
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
 
 // @desc    Supprimer une leçon d'un cours
 // @route   DELETE /api/courses/:id/lessons/:lessonId
 // @access  Privé (Enseignant propriétaire)
-const deleteLesson = async (req, res) => {
-  try {
-    const course = await Course.findById(req.params.id);
 
-    if (!course) {
-      return res.status(404).json({ success: false, message: 'Cours introuvable' });
-    }
-
-    if (course.enseignant_id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Action non autorisée' });
-    }
-
-    const lessonIndex = course.lecons.findIndex(
-      (l) => l._id.toString() === req.params.lessonId
-    );
-
-    if (lessonIndex === -1) {
-      return res.status(404).json({ success: false, message: 'Leçon introuvable' });
-    }
-
-    course.lecons.splice(lessonIndex, 1);
-
-    // Recalculer l'ordre des leçons restantes
-    course.lecons.forEach((lecon, index) => {
-      lecon.ordre = index + 1;
-    });
-
-    await course.save();
-
-    res.status(200).json({ success: true, message: 'Leçon supprimée avec succès' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
 
 module.exports = {
   createCourse,
@@ -309,6 +252,5 @@ module.exports = {
   updateCourse,
   togglePublishCourse,
   deleteCourse,
-  addLesson,
-  deleteLesson,
+  
 };
